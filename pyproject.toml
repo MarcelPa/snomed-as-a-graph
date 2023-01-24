@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "snomed-as-a-graph"
+version = "0.1.0"
+description = ""
+authors = ["Marcel Parciak <marcel.parciak@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "snomed_as_a_graph"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pyvis = "^0.3.1"
+networkx = "^3.0"
+pandas = "^1.5.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
