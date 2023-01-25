@@ -3,7 +3,6 @@ import os
 from typing import Dict
 
 import pandas as pd
-from sqlalchemy import create_engine
 
 
 def find_files(path: str) -> Dict[str, str]:
@@ -23,6 +22,8 @@ def find_files(path: str) -> Dict[str, str]:
 
 
 def main():
+    from sqlalchemy import create_engine
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "input",

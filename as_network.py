@@ -1,6 +1,6 @@
 # %%
 from functools import cache
-from typing import Any, List, Iterable
+from typing import Any, List, Iterable, Optional
 
 import networkx as nx
 import pandas as pd
@@ -47,10 +47,21 @@ def find_common_ancestor(G: nx.DiGraph, targetNodes: List[Any]) -> Any:
 
 
 @cache
-def graph_from_snomed() -> nx.DiGraph:
+def graph_from_snomed(withType: Optional[Any]) -> nx.DiGraph:
     """Loads a directed graph from SNOMED CT, using the relationships as a basis."""
+    # we aim to load the latest, valid relationships from SNOMED CT
+    relationship = (
+        tables["Relationship"]
+        .sort_values(by="effectiveTime", ascending=False)
+        .drop_duplicates(subset="id", keep="first")
+        .copy()
+    )
+    if withType is None:
+        queryString = "active == 1"
+    else:
+        queryString = "(active == 1) and (typeId == @withType)"
     return nx.from_pandas_edgelist(
-            tables["Relationship"].query("active == 1"), #TODO: it should actually be only edges of type 'is a'?
+        relationship.query(queryString),
         source="destinationId",
         target="sourceId",
         edge_attr="typeId",
@@ -66,13 +77,12 @@ def subgraph_on_nodes(G: nx.DiGraph, nodes: Iterable[Any]) -> nx.DiGraph:
     return G.subgraph(parents)
 
 
-def plot_graph_highlight_lca(
+def plot_hierarchical_graph_highlight_lca(
     G: nx.DiGraph, nodes: Iterable[Any], file_path: str
 ) -> None:
     """Plots a subgraph of G, highlighting the target nodes and its lowest common
     ancestor."""
     from pyvis.network import Network
-
     for i, layer in enumerate(nx.topological_generations(G)):
         for node in layer:
             if node in nodes:
@@ -81,80 +91,40 @@ def plot_graph_highlight_lca(
                 G.nodes[node]["group"] = "normal"
             G.nodes[node]["label"] = f"{get_name(node)}\n{node}"
             G.nodes[node]["level"] = i
-
-    G.nodes[find_common_ancestor(G, gender)]["group"] = "type"
+    G.nodes[find_common_ancestor(G, nodes)]["group"] = "type"
     pos = nx.multipartite_layout(G, subset_key="level", align="horizontal")
     nt = Network(directed=True, select_menu=True, filter_menu=True, layout=pos)
-    nt.set_options(
-        """
-    var options = {
-        "configure": {
-            "enabled": true
-        },
-        "groups": {
-            "normal": {"color": {"background": "#97c3fc", "border": "#4c617f"}},
-            "target": {"color": {"background": "#c3fc97", "border": "#617f4c"}},
-            "type": {"color": {"background": "#fc97c3", "border": "#7f4c61"}}
-        },
-        "edges": {
-            "color": {
-                "inherit": true
-            },
-            "smooth": {
-                "enabled": true,
-                "type": "dynamic"
-            }
-        },
-        "interaction": {
-            "dragNodes": true,
-            "hideEdgesOnDrag": false,
-            "hideNodesOnDrag": false
-        },
-        "layout": {
-            "hierarchical": {
-                "blockShifting": true,
-                "edgeMinimization": true,
-                "enabled": true,
-                "levelSeparation": 125,
-                "parentCentralization": true,
-                "sortMethod": "hubsize",
-                "treeSpacing": 200
-            },
-            "improvedLayout": true,
-            "randomSeed": 0
-        },
-        "physics": {
-            "enabled": true,
-            "stabilization": {
-                "enabled": true,
-                "fit": true,
-                "iterations": 1000,
-                "onlyDynamicEdges": false,
-                "updateInterval": 50
-            },
-            "hierarchicalRepulsion": {
-                "nodeDistance": 150
-            }
-        }
-    }
-    """
-    )
+    with open("hierarchical_options.json", "r") as f:
+        options = f.read()
+    nt.set_options(f"var options = {options}")
     nt.from_nx(G)
     nt.show(file_path)
 
 
 # %%
-G_snomed = graph_from_snomed()
+G_snomed = graph_from_snomed(withType=116680003)  # Is a (attribute)
 
 # %% [markdown]
 # Example with gender
 
 # %%
 gender = [248152002, 248153007, 32570681000036106, 261665006]
+for g in gender:
+    print(g, get_name(g))
+
 subG_snomed = subgraph_on_nodes(G_snomed, gender)
 
 # %%
-plot_graph_highlight_lca(subG_snomed, gender, "gender.html")
+plot_hierarchical_graph_highlight_lca(subG_snomed, gender, "gender.html")
+
+# %%
+# Alternative: without 'other'
+gender = [248152002, 248153007, 32570681000036106]
+for g in gender:
+    print(g, get_name(g))
+
+subG_snomed = subgraph_on_nodes(G_snomed, gender)
+plot_hierarchical_graph_highlight_lca(subG_snomed, gender, "gender.html")
 
 # %% [markdown]
 # Example with Treatment Substances
@@ -175,14 +145,24 @@ substances = [
     703786007,
     871800005,
     444609007,
-    74964007,
+    74964007,  # Other (qualifier value)
 ]
-subG_subst = subgraph_on_nodes(G_snomed, substances[:-1])
+subG_subst = subgraph_on_nodes(G_snomed, substances)
+plot_hierarchical_graph_highlight_lca(subG_subst, substances, "substances.html")
+
+# %% [markdown]
+# Example with Other Substances
 
 # %%
-a = find_common_ancestor(subG_subst, substances[:-1])
-get_name(a)
+otherSubstances = [
+    111165009,
+    74470007,
+    333710000,
+    68887009,
+    108809004,
+    74964007,  # Other (qualifier value)
+]
+subG_otherSubst = subgraph_on_nodes(G_snomed, otherSubstances[:-1])
+plot_hierarchical_graph_highlight_lca(subG_otherSubst, otherSubstances[:-1], "otherSubstances.html")
 
-# %%
-plot_graph_highlight_lca(subG_subst, substances[:-1], "substances.html")
 # %%
